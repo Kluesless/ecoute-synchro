@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Écoute synchro</title>
+<style>
+  :root { --bg:#14121f; --card:#1f1b33; --txt:#f2efff; --acc:#8b6cff; --mut:#9a94b8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.3rem; margin: 8px 0 16px; }
+  .card { background:var(--card); border-radius:14px; padding:14px; margin-bottom:14px; }
+  #player-wrap { position:relative; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
+  #player-wrap iframe, #player-wrap #player { position:absolute; inset:0; width:100%; height:100%; }
+  input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
+  input { background:#2a2545; color:var(--txt); flex:1; min-width:0; }
+  button { background:var(--acc); color:#fff; cursor:pointer; }
+  button.ghost { background:#2a2545; }
+  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; cursor:pointer; }
+  li.cur { background:#2a2545; }
+  li span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  li small { color:var(--mut); }
+  #join { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:12px; padding:20px; z-index:10; }
+  #join input { flex:none; width:min(320px,100%); text-align:center; }
+  #status { color:var(--mut); font-size:.85rem; margin-top:6px; }
+</style>
+</head>
+<body>
+<div id="join">
+  <h1>🎧 Écoute synchro</h1>
+  <p style="color:var(--mut);margin:0;text-align:center">Même nom de salle = même musique en même temps</p>
+  <input id="roomInput" placeholder="Nom de la salle (ex: emma-et-lea)">
+  <button id="joinBtn">Rejoindre</button>
+</div>
+
+<main>
+  <h1>🎧 Salle : <span id="roomName"></span></h1>
+
+  <div class="card">
+    <div id="player-wrap"><div id="player"></div></div>
+    <div class="row">
+      <button class="ghost" id="prev">⏮</button>
+      <button id="toggle">⏯</button>
+      <button class="ghost" id="next">⏭</button>
+    </div>
+    <div id="status">Connexion…</div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-top:0">
+      <input id="link" placeholder="Colle un lien YouTube ou une playlist">
+      <button id="add">Ajouter</button>
+    </div>
+    <ul id="queue" style="margin-top:10px"></ul>
+  </div>
+</main>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+let ws, P, S = null, applying = false, loaded = null, ready = false, room = '';
+
+const $ = (id) => document.getElementById(id);
+const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+const expected = () => S.playing ? S.pos + (Date.now() - S.recv) / 1000 : S.pos;
+
+// ---------- Connexion ----------
+$('joinBtn').onclick = () => {
+  room = $('roomInput').value.trim().toLowerCase() || 'salle';
+  $('roomName').textContent = room;
+  $('join').style.display = 'none';
+  connect();
+};
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + location.host);
+  ws.onopen = () => { send({ type: 'join', room }); $('status').textContent = 'Connectée ✔'; };
+  ws.onclose = () => { $('status').textContent = 'Déconnectée, reconnexion…'; setTimeout(connect, 2000); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'state') { S = m; S.recv = Date.now(); apply(); }
+  };
+}
+
+// ---------- Lecteur YouTube ----------
+function onYouTubeIframeAPIReady() {
+  P = new YT.Player('player', {
+    playerVars: { playsinline: 1, rel: 0 },
+    events: { onReady: () => { ready = true; apply(); }, onStateChange: onPlayerState },
+  });
+}
+
+function apply() {
+  if (!ready || !S) return;
+  renderQueue();
+  const it = S.queue[S.index];
+  if (!it) { applying = true; P.stopVideo(); loaded = null; setTimeout(() => applying = false, 800); return; }
+
+  applying = true;
+  const key = S.index + ':' + it.id;
+  if (loaded !== key) {
+    loaded = key;
+    if (it.kind === 'playlist') P.loadPlaylist({ list: it.id, index: S.pl, startSeconds: expected() });
+    else P.loadVideoById({ videoId: it.id, startSeconds: expected() });
+    if (!S.playing) setTimeout(() => P.pauseVideo(), 1000);
+  } else {
+    if (it.kind === 'playlist' && P.getPlaylistIndex && P.getPlaylistIndex() !== S.pl) {
+      P.playVideoAt(S.pl);
+    } else if (Math.abs(P.getCurrentTime() - expected()) > 2) {
+      P.seekTo(expected(), true);
+    }
+    const st = P.getPlayerState();
+    if (S.playing && st !== 1 && st !== 3) P.playVideo();
+    if (!S.playing && st === 1) P.pauseVideo();
+  }
+  setTimeout(() => applying = false, 1500);
+}
+
+function onPlayerState(e) {
+  if (applying || !S) return;
+  const it = S.queue[S.index];
+  if (!it) return;
+  const t = P.getCurrentTime();
+
+  if (e.data === YT.PlayerState.PLAYING) {
+    if (it.kind === 'playlist' && P.getPlaylistIndex() !== S.pl) return send({ type: 'plindex', pl: P.getPlaylistIndex() });
+    if (!S.playing) send({ type: 'play', pos: t });
+    else if (Math.abs(t - expected()) > 2) send({ type: 'seek', pos: t });
+  } else if (e.data === YT.PlayerState.PAUSED && S.playing) {
+    send({ type: 'pause' });
+  } else if (e.data === YT.PlayerState.ENDED) {
+    send({ type: 'next', from: S.index });
+  }
+}
+
+// ---------- Contrôles ----------
+$('toggle').onclick = () => S && send(S.playing ? { type: 'pause' } : { type: 'play' });
+$('next').onclick = () => send({ type: 'next' });
+$('prev').onclick = () => send({ type: 'prev' });
+
+function parseLink(url) {
+  try {
+    const u = new URL(url);
+    const list = u.searchParams.get('list');
+    if (list) return { kind: 'playlist', id: list };
+    if (u.hostname.includes('youtu.be')) return { kind: 'video', id: u.pathname.slice(1) };
+    const v = u.searchParams.get('v');
+    if (v) return { kind: 'video', id: v };
+    const m = u.pathname.match(/\/(shorts|embed)\/([\w-]{11})/);
+    if (m) return { kind: 'video', id: m[2] };
+  } catch {}
+  return null;
+}
+
+$('add').onclick = async () => {
+  const p = parseLink($('link').value.trim());
+  if (!p) { alert('Lien YouTube non reconnu 🤔'); return; }
+  let title = '';
+  try {
+    const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent($('link').value.trim()));
+    title = (await r.json()).title || '';
+  } catch {}
+  send({ type: 'add', ...p, title: title || (p.kind === 'playlist' ? 'Playlist' : 'Vidéo ' + p.id) });
+  $('link').value = '';
+};
+$('link').addEventListener('keydown', (e) => e.key === 'Enter' && $('add').click());
+
+function renderQueue() {
+  const ul = $('queue');
+  ul.innerHTML = '';
+  S.queue.forEach((it, i) => {
+    const li = document.createElement('li');
+    if (i === S.index) li.className = 'cur';
+    const span = document.createElement('span');
+    span.textContent = (it.kind === 'playlist' ? '📃 ' : '▶ ') + it.title;
+    const x = document.createElement('small');
+    x.textContent = '✕';
+    x.onclick = (e) => { e.stopPropagation(); send({ type: 'remove', index: i }); };
+    li.append(span, x);
+    li.onclick = () => send({ type: 'jump', index: i });
+    ul.appendChild(li);
+  });
+  if (!S.queue.length) ul.innerHTML = '<li style="cursor:default"><span style="color:var(--mut)">File vide, ajoute un lien !</span></li>';
+}
+</script>
+</body>
+</html>

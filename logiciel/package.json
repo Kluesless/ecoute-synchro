@@ -1,0 +1,19 @@
+{
+  "name": "ecoute-synchro-logiciel",
+  "version": "1.0.0",
+  "description": "Écoute synchro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.emma.ecoutesynchro",
+    "productName": "Ecoute Synchro",
+    "win": { "target": "nsis" }
+  }
+}
