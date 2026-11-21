@@ -14,7 +14,7 @@
   header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
   #me { background:var(--card2); padding:6px 12px; border-radius:20px; font-size:.9rem; white-space:nowrap; margin-bottom:6px; }
 
-  .card { background:var(--card); border-radius:14px; padding:12px; }
+  .card { background:var(--card); border-radius:14px; padding:12px; min-width:0; }
   .card > strong { display:block; margin-bottom:8px; font-size:.95rem; }
   input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
   input { background:var(--card2); color:var(--txt); flex:1; min-width:0; }
@@ -23,7 +23,7 @@
   button.ghost { background:var(--card2); }
   .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
 
-  #player-wrap { position:relative; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
+  #player-wrap { position:relative; aspect-ratio:16/9; width:100%; border-radius:12px; overflow:hidden; background:#000; }
   #player-wrap iframe, #player-wrap #player { position:absolute; inset:0; width:100%; height:100%; }
   .controls { display:flex; gap:8px; justify-content:center; margin-top:10px; }
   .controls button { min-width:56px; }
@@ -33,7 +33,7 @@
   li { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; cursor:pointer; }
   li:hover { background:#252040; }
   li.cur { background:var(--card2); }
-  li span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  li span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   li small { color:var(--mut); }
 
   #layout { display:flex; flex-direction:column; gap:12px; }
@@ -43,8 +43,10 @@
   @media (min-width: 820px) and (min-height: 540px) {
     body { height:100vh; overflow:hidden; }
     main { height:100vh; display:flex; flex-direction:column; }
-    #layout { flex:1; min-height:0; display:grid; grid-template-columns: 1.4fr 1fr; align-items:start; }
+    #layout { flex:1; min-height:0; display:grid; grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr); align-items:start; }
+    #left, #right { min-width:0; }
     #left { align-self:start; }
+    #player-wrap { max-height: calc(100vh - 210px); }
     #right { height:100%; }
     #queueCard, #plCard { flex:1; min-height:0; display:flex; flex-direction:column; }
     #queueCard ul, #plCard ul { flex:1; min-height:0; max-height:none; }
