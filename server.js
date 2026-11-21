@@ -17,8 +17,14 @@ const rooms = {};
 function getRoom(id) {
   return rooms[id] || (rooms[id] = {
     queue: [], index: 0, playing: false,
-    base: 0, ts: Date.now(), pl: 0, clients: new Set(),
+    base: 0, ts: Date.now(), pl: 0, clients: new Set(), chat: [],
   });
+}
+function pushChat(r, msg) {
+  r.chat.push(msg);
+  if (r.chat.length > 50) r.chat.shift();
+  const data = JSON.stringify({ type: 'chat', ...msg });
+  r.clients.forEach((c) => c.readyState === 1 && c.send(data));
 }
 const position = (r) => (r.playing ? r.base + (Date.now() - r.ts) / 1000 : r.base);
 const snapshot = (r) => ({
@@ -40,9 +46,20 @@ wss.on('connection', (ws) => {
     try { m = JSON.parse(raw); } catch { return; }
 
     if (m.type === 'join') {
+      if (r) return; // déjà dans une salle
       r = getRoom(String(m.room).slice(0, 40));
+      ws.pseudo = String(m.pseudo || '').trim().slice(0, 20) || 'Anonyme';
       r.clients.add(ws);
       ws.send(JSON.stringify(snapshot(r)));
+      ws.send(JSON.stringify({ type: 'chat_history', messages: r.chat }));
+      pushChat(r, { system: true, text: ws.pseudo + ' a rejoint la salle' });
+      return;
+    }
+    if (!r) return;
+
+    if (m.type === 'chat') {
+      const text = String(m.text || '').trim().slice(0, 300);
+      if (text) pushChat(r, { pseudo: ws.pseudo, text, ts: Date.now() });
       return;
     }
     if (!r) return;
@@ -84,15 +101,19 @@ wss.on('connection', (ws) => {
         }
         break;
       case 'plindex':
-        if (m.pl === r.pl) return;
-        r.pl = m.pl; r.base = 0; r.ts = Date.now();
+        if (!Number.isInteger(m.pl) || m.pl < 0 || m.pl === r.pl) return;
+        r.pl = m.pl; r.base = 0; r.ts = Date.now(); r.playing = true;
         break;
       default:
         return;
     }
     broadcast(r);
   });
-  ws.on('close', () => { if (r) r.clients.delete(ws); });
+  ws.on('close', () => {
+    if (!r) return;
+    r.clients.delete(ws);
+    pushChat(r, { system: true, text: ws.pseudo + ' a quitté la salle' });
+  });
 });
 
 // Rappel de synchro toutes les 5 s pour rattraper les décalages

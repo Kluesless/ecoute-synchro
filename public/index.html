@@ -27,18 +27,29 @@
           align-items:center; justify-content:center; gap:12px; padding:20px; z-index:10; }
   #join input { flex:none; width:min(320px,100%); text-align:center; }
   #status { color:var(--mut); font-size:.85rem; margin-top:6px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #me { background:#2a2545; padding:6px 12px; border-radius:20px; font-size:.9rem; white-space:nowrap; }
+  #chatLog { height:240px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:4px; margin-bottom:10px; }
+  .msg { background:#2a2545; padding:6px 10px; border-radius:10px; max-width:85%; word-break:break-word; align-self:flex-start; }
+  .msg b { color:var(--acc); font-size:.85rem; }
+  .msg.mine { align-self:flex-end; background:#3a2f6b; }
+  .msg.sys { align-self:center; background:none; color:var(--mut); font-size:.8rem; }
 </style>
 </head>
 <body>
 <div id="join">
   <h1>🎧 Écoute synchro</h1>
   <p style="color:var(--mut);margin:0;text-align:center">Même nom de salle = même musique en même temps</p>
+  <input id="pseudoInput" placeholder="Ton pseudo" maxlength="20">
   <input id="roomInput" placeholder="Nom de la salle (ex: emma-et-lea)">
   <button id="joinBtn">Rejoindre</button>
 </div>
 
 <main>
-  <h1>🎧 Salle : <span id="roomName"></span></h1>
+  <header>
+    <h1>🎧 Salle : <span id="roomName"></span></h1>
+    <div id="me">👤 <span id="meName"></span></div>
+  </header>
 
   <div class="card">
     <div id="player-wrap"><div id="player"></div></div>
@@ -51,38 +62,111 @@
   </div>
 
   <div class="card">
+    <strong>💬 Chat</strong>
+    <div id="chatLog" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:0">
+      <input id="chatInput" placeholder="Écris un message…" maxlength="300">
+      <button id="chatSend">Envoyer</button>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="row" style="margin-top:0">
       <input id="link" placeholder="Colle un lien YouTube ou une playlist">
       <button id="add">Ajouter</button>
     </div>
     <ul id="queue" style="margin-top:10px"></ul>
   </div>
+
+  <div class="card" id="plCard" style="display:none">
+    <strong>📃 Playlist en cours</strong>
+    <ul id="plList" style="margin-top:10px;max-height:320px;overflow-y:auto"></ul>
+  </div>
 </main>
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 let ws, P, S = null, applying = false, loaded = null, ready = false, room = '';
+let plIds = [];
+let pseudo = '';
+const titles = {};
+
+// ---------- Panneau de la playlist ----------
+function hidePlaylist() { plIds = []; $('plCard').style.display = 'none'; }
+
+function refreshPlaylist() {
+  if (!ready || !S) return;
+  const it = S.queue[S.index];
+  if (!it || it.kind !== 'playlist') return hidePlaylist();
+  const ids = P.getPlaylist && P.getPlaylist();
+  if (ids && ids.length) {
+    if (ids.join() !== plIds.join()) { plIds = ids; loadTitles(); }
+    $('plCard').style.display = '';
+    renderPlaylist();
+  }
+}
+
+async function loadTitles() {
+  const ids = plIds.slice();
+  for (let i = 0; i < ids.length; i += 5) {
+    await Promise.all(ids.slice(i, i + 5).map(async (id) => {
+      if (titles[id] !== undefined) return;
+      try {
+        const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + id));
+        titles[id] = (await r.json()).title || '';
+      } catch { titles[id] = ''; }
+    }));
+    if (ids.join() !== plIds.join()) return; // la playlist a changé entre-temps
+    renderPlaylist();
+  }
+}
+
+function renderPlaylist() {
+  const ul = $('plList');
+  ul.innerHTML = '';
+  plIds.forEach((id, i) => {
+    const li = document.createElement('li');
+    if (S && i === S.pl) li.className = 'cur';
+    const span = document.createElement('span');
+    span.textContent = (i + 1) + '. ' + (titles[id] || 'Piste ' + (i + 1));
+    li.appendChild(span);
+    li.onclick = () => send({ type: 'plindex', pl: i });
+    ul.appendChild(li);
+  });
+}
 
 const $ = (id) => document.getElementById(id);
 const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const expected = () => S.playing ? S.pos + (Date.now() - S.recv) / 1000 : S.pos;
 
 // ---------- Connexion ----------
+try {
+  $('pseudoInput').value = localStorage.getItem('pseudo') || '';
+  $('roomInput').value = localStorage.getItem('room') || '';
+} catch {}
+
 $('joinBtn').onclick = () => {
+  pseudo = $('pseudoInput').value.trim().slice(0, 20) || 'Anonyme';
   room = $('roomInput').value.trim().toLowerCase() || 'salle';
+  try { localStorage.setItem('pseudo', pseudo); localStorage.setItem('room', room); } catch {}
   $('roomName').textContent = room;
+  $('meName').textContent = pseudo;
   $('join').style.display = 'none';
   connect();
 };
+['pseudoInput', 'roomInput'].forEach((id) =>
+  $(id).addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBtn').click()));
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + location.host);
-  ws.onopen = () => { send({ type: 'join', room }); $('status').textContent = 'Connectée ✔'; };
+  ws.onopen = () => { send({ type: 'join', room, pseudo }); $('status').textContent = 'Connectée ✔'; };
   ws.onclose = () => { $('status').textContent = 'Déconnectée, reconnexion…'; setTimeout(connect, 2000); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'state') { S = m; S.recv = Date.now(); apply(); }
+    else if (m.type === 'chat') addChat(m);
+    else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach(addChat); }
   };
 }
 
@@ -98,12 +182,15 @@ function apply() {
   if (!ready || !S) return;
   renderQueue();
   const it = S.queue[S.index];
-  if (!it) { applying = true; P.stopVideo(); loaded = null; setTimeout(() => applying = false, 800); return; }
+  if (!it) { applying = true; P.stopVideo(); loaded = null; hidePlaylist(); setTimeout(() => applying = false, 800); return; }
+  if (it.kind !== 'playlist') hidePlaylist();
+  else if (plIds.length) renderPlaylist();
 
   applying = true;
   const key = S.index + ':' + it.id;
   if (loaded !== key) {
     loaded = key;
+    plIds = [];
     if (it.kind === 'playlist') P.loadPlaylist({ list: it.id, index: S.pl, startSeconds: expected() });
     else P.loadVideoById({ videoId: it.id, startSeconds: expected() });
     if (!S.playing) setTimeout(() => P.pauseVideo(), 1000);
@@ -117,10 +204,11 @@ function apply() {
     if (S.playing && st !== 1 && st !== 3) P.playVideo();
     if (!S.playing && st === 1) P.pauseVideo();
   }
-  setTimeout(() => applying = false, 1500);
+  setTimeout(() => { applying = false; refreshPlaylist(); }, 1500);
 }
 
 function onPlayerState(e) {
+  if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.CUED) refreshPlaylist();
   if (applying || !S) return;
   const it = S.queue[S.index];
   if (!it) return;
@@ -137,10 +225,48 @@ function onPlayerState(e) {
   }
 }
 
+// ---------- Chat ----------
+function addChat(m) {
+  const log = $('chatLog');
+  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const d = document.createElement('div');
+  if (m.system) {
+    d.className = 'msg sys';
+    d.textContent = m.text;
+  } else {
+    d.className = 'msg' + (m.pseudo === pseudo ? ' mine' : '');
+    const b = document.createElement('b');
+    b.textContent = m.pseudo;
+    const t = document.createElement('div');
+    t.textContent = m.text;
+    d.append(b, t);
+  }
+  log.appendChild(d);
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+  if (nearBottom || m.pseudo === pseudo) log.scrollTop = log.scrollHeight;
+}
+
+function sendChat() {
+  const text = $('chatInput').value.trim();
+  if (!text) return;
+  send({ type: 'chat', text });
+  $('chatInput').value = '';
+}
+$('chatSend').onclick = sendChat;
+$('chatInput').addEventListener('keydown', (e) => e.key === 'Enter' && sendChat());
+
 // ---------- Contrôles ----------
 $('toggle').onclick = () => S && send(S.playing ? { type: 'pause' } : { type: 'play' });
-$('next').onclick = () => send({ type: 'next' });
-$('prev').onclick = () => send({ type: 'prev' });
+$('next').onclick = () => {
+  const it = S && S.queue[S.index];
+  if (it && it.kind === 'playlist' && S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
+  else send({ type: 'next' });
+};
+$('prev').onclick = () => {
+  const it = S && S.queue[S.index];
+  if (it && it.kind === 'playlist' && S.pl > 0) send({ type: 'plindex', pl: S.pl - 1 });
+  else send({ type: 'prev' });
+};
 
 function parseLink(url) {
   try {
