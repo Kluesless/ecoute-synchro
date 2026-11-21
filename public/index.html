@@ -5,44 +5,97 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Écoute synchro</title>
 <style>
-  :root { --bg:#14121f; --card:#1f1b33; --txt:#f2efff; --acc:#8b6cff; --mut:#9a94b8; }
+  :root { --bg:#14121f; --card:#1f1b33; --card2:#2a2545; --txt:#f2efff; --acc:#8b6cff; --mut:#9a94b8; --line:#342e57; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt); }
-  main { max-width: 760px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 1.3rem; margin: 8px 0 16px; }
-  .card { background:var(--card); border-radius:14px; padding:14px; margin-bottom:14px; }
+  html, body { margin:0; }
+  body { font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+  main { max-width: 1200px; margin: 0 auto; padding: 12px 16px; }
+  h1 { font-size: 1.1rem; margin: 4px 0 10px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #me { background:var(--card2); padding:6px 12px; border-radius:20px; font-size:.9rem; white-space:nowrap; margin-bottom:6px; }
+
+  .card { background:var(--card); border-radius:14px; padding:12px; }
+  .card > strong { display:block; margin-bottom:8px; font-size:.95rem; }
+  input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
+  input { background:var(--card2); color:var(--txt); flex:1; min-width:0; }
+  button { background:var(--acc); color:#fff; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  button.ghost { background:var(--card2); }
+  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+
   #player-wrap { position:relative; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
   #player-wrap iframe, #player-wrap #player { position:absolute; inset:0; width:100%; height:100%; }
-  input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
-  input { background:#2a2545; color:var(--txt); flex:1; min-width:0; }
-  button { background:var(--acc); color:#fff; cursor:pointer; }
-  button.ghost { background:#2a2545; }
-  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-  ul { list-style:none; padding:0; margin:0; }
-  li { display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; cursor:pointer; }
-  li.cur { background:#2a2545; }
+  .controls { display:flex; gap:8px; justify-content:center; margin-top:10px; }
+  .controls button { min-width:56px; }
+  #status { color:var(--mut); font-size:.8rem; margin-top:8px; text-align:center; }
+
+  ul { list-style:none; padding:0; margin:0; overflow-y:auto; max-height:220px; scrollbar-width:thin; }
+  li { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; cursor:pointer; }
+  li:hover { background:#252040; }
+  li.cur { background:var(--card2); }
   li span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   li small { color:var(--mut); }
+
+  #layout { display:flex; flex-direction:column; gap:12px; }
+  #right { display:flex; flex-direction:column; gap:12px; min-height:0; }
+
+  /* Grand écran : tout tient sans scroll */
+  @media (min-width: 820px) and (min-height: 540px) {
+    body { height:100vh; overflow:hidden; }
+    main { height:100vh; display:flex; flex-direction:column; }
+    #layout { flex:1; min-height:0; display:grid; grid-template-columns: 1.4fr 1fr; align-items:start; }
+    #left { align-self:start; }
+    #right { height:100%; }
+    #queueCard, #plCard { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #queueCard ul, #plCard ul { flex:1; min-height:0; max-height:none; }
+  }
+
+  /* Écran de départ */
   #join { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column;
-          align-items:center; justify-content:center; gap:12px; padding:20px; z-index:10; }
-  #join input { flex:none; width:min(320px,100%); text-align:center; }
-  #status { color:var(--mut); font-size:.85rem; margin-top:6px; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  #me { background:#2a2545; padding:6px 12px; border-radius:20px; font-size:.9rem; white-space:nowrap; }
-  #chatLog { height:240px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:4px; margin-bottom:10px; }
-  .msg { background:#2a2545; padding:6px 10px; border-radius:10px; max-width:85%; word-break:break-word; align-self:flex-start; }
-  .msg b { color:var(--acc); font-size:.85rem; }
-  .msg.mine { align-self:flex-end; background:#3a2f6b; }
-  .msg.sys { align-self:center; background:none; color:var(--mut); font-size:.8rem; }
+          align-items:center; justify-content:center; gap:12px; padding:20px; z-index:30; }
+  #join h1 { font-size:1.5rem; margin:0; }
+  #join .tag { color:var(--mut); margin:0 0 8px; text-align:center; }
+  .field { display:flex; flex-direction:column; gap:6px; width:min(320px,100%); }
+  .field label { color:var(--mut); font-size:.8rem; text-align:center; }
+  #join input { flex:none; width:100%; text-align:center; }
+  #joinBtn { padding:10px 28px; }
+
+  /* Chat flottant */
+  #chatFab { position:fixed; left:16px; bottom:16px; width:52px; height:52px; border-radius:50%; padding:0;
+             font-size:1.4rem; box-shadow:0 6px 20px rgba(0,0,0,.45); z-index:20; }
+  #chatBadge { position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; padding:0 5px; border-radius:10px;
+               background:#ff5a7a; color:#fff; font-size:.75rem; line-height:20px; text-align:center; display:none; }
+  #chatPanel { position:fixed; left:16px; bottom:80px; width:300px; height:min(420px, calc(100vh - 100px));
+               background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.55);
+               display:none; flex-direction:column; overflow:hidden; z-index:20; }
+  #chatPanel.open { display:flex; animation:pop .15s ease; }
+  @keyframes pop { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  #chatHead { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--card2);
+              font-weight:600; font-size:.95rem; }
+  #chatClose { background:none; padding:2px 6px; color:var(--mut); font-size:1rem; }
+  #chatLog { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:10px; scrollbar-width:thin; }
+  .msg { background:var(--card2); padding:6px 10px; border-radius:12px 12px 12px 4px; max-width:85%; word-break:break-word; align-self:flex-start; font-size:.9rem; }
+  .msg b { color:var(--acc); font-size:.78rem; display:block; }
+  .msg.mine { align-self:flex-end; background:#3a2f6b; border-radius:12px 12px 4px 12px; }
+  .msg.sys { align-self:center; background:none; color:var(--mut); font-size:.75rem; padding:0; }
+  #chatForm { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
+  #chatForm input { padding:8px 10px; font-size:.9rem; }
+  #chatForm button { padding:8px 12px; }
 </style>
 </head>
 <body>
 <div id="join">
   <h1>🎧 Écoute synchro</h1>
-  <p style="color:var(--mut);margin:0;text-align:center">Même nom de salle = même musique en même temps</p>
-  <input id="pseudoInput" placeholder="Ton pseudo" maxlength="20">
-  <input id="roomInput" placeholder="Nom de la salle (ex: emma-et-lea)">
+  <p class="tag">Même nom de salle = même musique en même temps</p>
+  <div class="field">
+    <label for="roomInput">Nom de la salle</label>
+    <input id="roomInput" placeholder="ex : emma-et-lea">
+  </div>
   <button id="joinBtn">Rejoindre</button>
+  <div class="field" style="margin-top:28px">
+    <label for="pseudoInput">Ton pseudo</label>
+    <input id="pseudoInput" placeholder="Ton pseudo" maxlength="20">
+  </div>
 </div>
 
 <main>
@@ -51,44 +104,56 @@
     <div id="me">👤 <span id="meName"></span></div>
   </header>
 
-  <div class="card">
-    <div id="player-wrap"><div id="player"></div></div>
-    <div class="row">
-      <button class="ghost" id="prev">⏮</button>
-      <button id="toggle">⏯</button>
-      <button class="ghost" id="next">⏭</button>
-    </div>
-    <div id="status">Connexion…</div>
-  </div>
+  <div id="layout">
+    <section id="left">
+      <div class="card">
+        <div id="player-wrap"><div id="player"></div></div>
+        <div class="controls">
+          <button class="ghost" id="prev">⏮</button>
+          <button id="toggle">⏯</button>
+          <button class="ghost" id="next">⏭</button>
+        </div>
+        <div id="status">Connexion…</div>
+      </div>
+    </section>
 
-  <div class="card">
-    <strong>💬 Chat</strong>
-    <div id="chatLog" style="margin-top:10px"></div>
-    <div class="row" style="margin-top:0">
-      <input id="chatInput" placeholder="Écris un message…" maxlength="300">
-      <button id="chatSend">Envoyer</button>
-    </div>
-  </div>
+    <section id="right">
+      <div class="card">
+        <div class="row" style="margin-top:0">
+          <input id="link" placeholder="Colle un lien YouTube ou une playlist">
+          <button id="add">Ajouter</button>
+        </div>
+      </div>
 
-  <div class="card">
-    <div class="row" style="margin-top:0">
-      <input id="link" placeholder="Colle un lien YouTube ou une playlist">
-      <button id="add">Ajouter</button>
-    </div>
-    <ul id="queue" style="margin-top:10px"></ul>
-  </div>
+      <div class="card" id="queueCard">
+        <strong>🎶 File d'attente</strong>
+        <ul id="queue"></ul>
+      </div>
 
-  <div class="card" id="plCard" style="display:none">
-    <strong>📃 Playlist en cours</strong>
-    <ul id="plList" style="margin-top:10px;max-height:320px;overflow-y:auto"></ul>
+      <div class="card" id="plCard" style="display:none">
+        <strong>📃 Playlist en cours</strong>
+        <ul id="plList"></ul>
+      </div>
+    </section>
   </div>
 </main>
+
+<button id="chatFab" title="Chat">💬<span id="chatBadge"></span></button>
+<div id="chatPanel">
+  <div id="chatHead"><span>💬 Chat</span><button id="chatClose" title="Fermer">✕</button></div>
+  <div id="chatLog"></div>
+  <div id="chatForm">
+    <input id="chatInput" placeholder="Écris un message…" maxlength="300">
+    <button id="chatSend">➤</button>
+  </div>
+</div>
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 let ws, P, S = null, applying = false, loaded = null, ready = false, room = '';
 let plIds = [];
 let pseudo = '';
+let unread = 0;
 const titles = {};
 
 // ---------- Panneau de la playlist ----------
@@ -166,7 +231,7 @@ function connect() {
     const m = JSON.parse(e.data);
     if (m.type === 'state') { S = m; S.recv = Date.now(); apply(); }
     else if (m.type === 'chat') addChat(m);
-    else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach(addChat); }
+    else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach((x) => addChat(x, true)); }
   };
 }
 
@@ -226,7 +291,7 @@ function onPlayerState(e) {
 }
 
 // ---------- Chat ----------
-function addChat(m) {
+function addChat(m, silent) {
   const log = $('chatLog');
   const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
   const d = document.createElement('div');
@@ -244,7 +309,28 @@ function addChat(m) {
   log.appendChild(d);
   while (log.children.length > 100) log.removeChild(log.firstChild);
   if (nearBottom || m.pseudo === pseudo) log.scrollTop = log.scrollHeight;
+
+  // pastille de messages non lus quand le chat est fermé
+  if (!silent && !m.system && m.pseudo !== pseudo && !$('chatPanel').classList.contains('open')) {
+    unread++;
+    $('chatBadge').textContent = unread > 9 ? '9+' : unread;
+    $('chatBadge').style.display = 'block';
+  }
 }
+
+function toggleChat(open) {
+  const panel = $('chatPanel');
+  const willOpen = typeof open === 'boolean' ? open : !panel.classList.contains('open');
+  panel.classList.toggle('open', willOpen);
+  if (willOpen) {
+    unread = 0;
+    $('chatBadge').style.display = 'none';
+    $('chatLog').scrollTop = $('chatLog').scrollHeight;
+    $('chatInput').focus();
+  }
+}
+$('chatFab').onclick = () => toggleChat();
+$('chatClose').onclick = () => toggleChat(false);
 
 function sendChat() {
   const text = $('chatInput').value.trim();
