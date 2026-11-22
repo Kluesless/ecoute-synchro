@@ -5,50 +5,71 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Écoute synchro</title>
 <style>
-  :root { --bg:#14121f; --card:#1f1b33; --card2:#2a2545; --txt:#f2efff; --acc:#8b6cff; --mut:#9a94b8; --line:#342e57; }
+  :root { --bg:#100e1b; --card:#1b1730; --card2:#272145; --txt:#f2efff; --acc:#8b6cff; --acc2:#b39dff; --mut:#9a94b8; --line:#342e57; }
   * { box-sizing: border-box; }
   html, body { margin:0; }
-  body { font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+  body { font-family: system-ui, sans-serif; color:var(--txt);
+         background: radial-gradient(900px 500px at 8% -10%, rgba(139,108,255,.18), transparent), var(--bg); }
   main { max-width: 1200px; margin: 0 auto; padding: 12px 16px; }
   h1 { font-size: 1.1rem; margin: 4px 0 10px; }
   header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
   #me { background:var(--card2); padding:6px 12px; border-radius:20px; font-size:.9rem; white-space:nowrap; margin-bottom:6px; }
 
-  .card { background:var(--card); border-radius:14px; padding:12px; min-width:0; }
-  .card > strong { display:block; margin-bottom:8px; font-size:.95rem; }
+  .card { background:var(--card); border:1px solid rgba(255,255,255,.04); border-radius:14px; padding:12px; min-width:0; }
+  .head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .head strong { font-size:.95rem; }
+  .count { color:var(--mut); font-weight:400; font-size:.85rem; margin-left:4px; }
+
   input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
   input { background:var(--card2); color:var(--txt); flex:1; min-width:0; }
-  button { background:var(--acc); color:#fff; cursor:pointer; }
-  button:hover { filter:brightness(1.1); }
+  input:focus { outline:2px solid var(--acc); outline-offset:0; }
+  button { background:var(--acc); color:#fff; cursor:pointer; transition:filter .15s, transform .1s; }
+  button:hover { filter:brightness(1.12); }
+  button:active { transform:scale(.96); }
   button.ghost { background:var(--card2); }
-  .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .mini { padding:4px 10px; font-size:.8rem; background:var(--card2); white-space:nowrap; }
+  .row { display:flex; gap:8px; }
 
-  #player-wrap { position:relative; aspect-ratio:16/9; width:100%; border-radius:12px; overflow:hidden; background:#000; }
+  #player-wrap { position:relative; aspect-ratio:16/9; width:100%; border-radius:12px; overflow:hidden; background:#000;
+                 box-shadow:0 10px 30px rgba(0,0,0,.45); }
   #player-wrap iframe, #player-wrap #player { position:absolute; inset:0; width:100%; height:100%; }
-  .controls { display:flex; gap:8px; justify-content:center; margin-top:10px; }
-  .controls button { min-width:56px; }
-  #status { color:var(--mut); font-size:.8rem; margin-top:8px; text-align:center; }
+  #nowPlaying { margin-top:10px; font-weight:600; font-size:.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .seekrow { display:flex; align-items:center; gap:8px; margin-top:6px; color:var(--mut); font-size:.78rem; }
+  .seekrow input[type=range], .vol input[type=range] { padding:0; height:18px; background:none; accent-color:var(--acc); cursor:pointer; flex:1; }
+  .seekrow input:focus, .vol input:focus { outline:none; }
+  .seekrow span { min-width:36px; text-align:center; font-variant-numeric:tabular-nums; }
+  .controls { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; margin-top:8px; }
+  .btns { display:flex; gap:8px; }
+  .btns button { min-width:54px; }
+  #toggle { min-width:64px; }
+  .vol { justify-self:end; display:flex; align-items:center; gap:6px; color:var(--mut); }
+  .vol input[type=range] { width:90px; flex:none; }
+  #status { color:var(--mut); font-size:.75rem; margin-top:8px; text-align:center; }
 
   ul { list-style:none; padding:0; margin:0; overflow-y:auto; max-height:220px; scrollbar-width:thin; }
-  li { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; cursor:pointer; }
-  li:hover { background:#252040; }
-  li.cur { background:var(--card2); }
-  li span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  li small { color:var(--mut); }
+  li { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; cursor:pointer; transition:background .12s; }
+  li:hover { background:#241f3d; }
+  li.cur { background:var(--card2); box-shadow:inset 3px 0 0 var(--acc); }
+  li.dragging { opacity:.4; }
+  li.over { box-shadow:inset 0 2px 0 var(--acc); }
+  li span.t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  li .grip { color:var(--mut); cursor:grab; user-select:none; font-size:.9rem; }
+  li small { color:var(--mut); padding:2px 5px; border-radius:6px; }
+  li small:hover { color:#fff; background:#3a3360; }
 
   #layout { display:flex; flex-direction:column; gap:12px; }
   #right { display:flex; flex-direction:column; gap:12px; min-height:0; }
 
   /* Grand écran : tout tient sans scroll */
-  @media (min-width: 820px) and (min-height: 540px) {
+  @media (min-width: 820px) and (min-height: 560px) {
     body { height:100vh; overflow:hidden; }
     main { height:100vh; display:flex; flex-direction:column; }
     #layout { flex:1; min-height:0; display:grid; grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr); align-items:start; }
     #left, #right { min-width:0; }
-    #left { align-self:start; }
-    #player-wrap { max-height: calc(100vh - 210px); }
     #right { height:100%; }
-    #queueCard, #plCard { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #player-wrap { max-height: calc(100vh - 300px); }
+    #queueCard { flex:0 1 auto; max-height:42%; min-height:90px; display:flex; flex-direction:column; }
+    #plCard { flex:1 1 0; min-height:120px; display:flex; flex-direction:column; }
     #queueCard ul, #plCard ul { flex:1; min-height:0; max-height:none; }
   }
 
@@ -67,22 +88,25 @@
              font-size:1.4rem; box-shadow:0 6px 20px rgba(0,0,0,.45); z-index:20; }
   #chatBadge { position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; padding:0 5px; border-radius:10px;
                background:#ff5a7a; color:#fff; font-size:.75rem; line-height:20px; text-align:center; display:none; }
-  #chatPanel { position:fixed; left:16px; bottom:80px; width:300px; height:min(420px, calc(100vh - 100px));
+  #chatPanel { position:fixed; left:16px; bottom:80px; width:310px; height:min(430px, calc(100vh - 100px));
                background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.55);
                display:none; flex-direction:column; overflow:hidden; z-index:20; }
   #chatPanel.open { display:flex; animation:pop .15s ease; }
   @keyframes pop { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-  #chatHead { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--card2);
-              font-weight:600; font-size:.95rem; }
+  #chatHead { display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+              background:linear-gradient(90deg, var(--card2), #31285a); font-weight:600; font-size:.95rem; }
   #chatClose { background:none; padding:2px 6px; color:var(--mut); font-size:1rem; }
-  #chatLog { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:10px; scrollbar-width:thin; }
-  .msg { background:var(--card2); padding:6px 10px; border-radius:12px 12px 12px 4px; max-width:85%; word-break:break-word; align-self:flex-start; font-size:.9rem; }
-  .msg b { color:var(--acc); font-size:.78rem; display:block; }
-  .msg.mine { align-self:flex-end; background:#3a2f6b; border-radius:12px 12px 4px 12px; }
+  #chatLog { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px; scrollbar-width:thin; }
+  .msg { background:var(--card2); padding:6px 10px; border-radius:14px 14px 14px 4px; max-width:86%; word-break:break-word;
+         align-self:flex-start; font-size:.9rem; animation:pop .12s ease; }
+  .msg .meta { display:flex; align-items:baseline; gap:6px; }
+  .msg b { font-size:.78rem; }
+  .msg time { color:var(--mut); font-size:.68rem; }
+  .msg.mine { align-self:flex-end; background:#3a2f6b; border-radius:14px 14px 4px 14px; }
   .msg.sys { align-self:center; background:none; color:var(--mut); font-size:.75rem; padding:0; }
   #chatForm { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
-  #chatForm input { padding:8px 10px; font-size:.9rem; }
-  #chatForm button { padding:8px 12px; }
+  #chatForm input { padding:8px 10px; font-size:.9rem; border-radius:18px; }
+  #chatForm button { padding:8px 14px; border-radius:18px; }
 </style>
 </head>
 <body>
@@ -110,10 +134,20 @@
     <section id="left">
       <div class="card">
         <div id="player-wrap"><div id="player"></div></div>
+        <div id="nowPlaying">Rien en lecture</div>
+        <div class="seekrow">
+          <span id="tCur">0:00</span>
+          <input type="range" id="seek" min="0" max="1000" value="0">
+          <span id="tDur">0:00</span>
+        </div>
         <div class="controls">
-          <button class="ghost" id="prev">⏮</button>
-          <button id="toggle">⏯</button>
-          <button class="ghost" id="next">⏭</button>
+          <span></span>
+          <div class="btns">
+            <button class="ghost" id="prev" title="Précédent">⏮</button>
+            <button id="toggle" title="Lecture / pause">▶</button>
+            <button class="ghost" id="next" title="Suivant">⏭</button>
+          </div>
+          <div class="vol">🔊<input type="range" id="vol" min="0" max="100" value="100" title="Volume (rien que pour toi)"></div>
         </div>
         <div id="status">Connexion…</div>
       </div>
@@ -121,19 +155,25 @@
 
     <section id="right">
       <div class="card">
-        <div class="row" style="margin-top:0">
+        <div class="row">
           <input id="link" placeholder="Colle un lien YouTube ou une playlist">
           <button id="add">Ajouter</button>
         </div>
       </div>
 
       <div class="card" id="queueCard">
-        <strong>🎶 File d'attente</strong>
+        <div class="head">
+          <strong>🎶 File d'attente<span class="count" id="queueCount">0</span></strong>
+          <button class="mini" id="shuffleQueue" title="Mélanger les morceaux à venir">🔀 Mélanger</button>
+        </div>
         <ul id="queue"></ul>
       </div>
 
       <div class="card" id="plCard" style="display:none">
-        <strong>📃 Playlist en cours</strong>
+        <div class="head">
+          <strong>📃 Playlist en cours</strong>
+          <button class="mini" id="shufflePl" title="Mélanger la playlist">🔀 Mélanger</button>
+        </div>
         <ul id="plList"></ul>
       </div>
     </section>
@@ -152,13 +192,212 @@
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-let ws, P, S = null, applying = false, loaded = null, ready = false, room = '';
+let ws, P, S = null, loaded = null, ready = false, room = '', pseudo = '';
 let plIds = [];
-let pseudo = '';
 let unread = 0;
+let quietUntil = 0;   // on ignore les évènements du lecteur juste après NOS propres commandes
+let lastAct = 0;      // dernière action de l'utilisateur (évite qu'un rappel de synchro l'écrase)
+let seeking = false;
+let vol = 100;
 const titles = {};
 
-// ---------- Panneau de la playlist ----------
+const $ = (id) => document.getElementById(id);
+const ACT = new Set(['play', 'pause', 'seek', 'jump', 'next', 'prev', 'remove', 'move', 'plindex', 'plshuffle', 'shufflequeue', 'add']);
+const send = (o) => {
+  if (ACT.has(o.type)) lastAct = Date.now();
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
+};
+const expected = () => (S.playing ? S.pos + (Date.now() - S.recv) / 1000 : S.pos);
+const silence = (ms) => { quietUntil = Math.max(quietUntil, Date.now() + ms); };
+const keyOf = (it) => it.uid + ':' + (it.ver || 0);
+const fmt = (s) => {
+  s = Math.max(0, Math.floor(s || 0));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+};
+
+// ---------- Écran de départ ----------
+try {
+  $('pseudoInput').value = localStorage.getItem('pseudo') || '';
+  $('roomInput').value = localStorage.getItem('room') || '';
+  const v = localStorage.getItem('vol');
+  if (v !== null && !isNaN(Number(v))) vol = Math.min(100, Math.max(0, Number(v)));
+} catch {}
+$('vol').value = vol;
+
+$('joinBtn').onclick = () => {
+  pseudo = $('pseudoInput').value.trim().slice(0, 20) || 'Anonyme';
+  room = $('roomInput').value.trim().toLowerCase() || 'salle';
+  try { localStorage.setItem('pseudo', pseudo); localStorage.setItem('room', room); } catch {}
+  $('roomName').textContent = room;
+  $('meName').textContent = pseudo;
+  $('join').style.display = 'none';
+  connect();
+};
+['pseudoInput', 'roomInput'].forEach((id) =>
+  $(id).addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBtn').click()));
+
+// ---------- Connexion ----------
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + location.host);
+  ws.onopen = () => { send({ type: 'join', room, pseudo }); $('status').textContent = 'Connectée ✔'; };
+  ws.onclose = () => { $('status').textContent = 'Déconnectée, reconnexion…'; setTimeout(connect, 2000); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'state') { S = m; S.recv = Date.now(); apply(!!m.tick); }
+    else if (m.type === 'chat') addChat(m);
+    else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach((x) => addChat(x, true)); }
+  };
+}
+
+// ---------- Lecteur YouTube ----------
+function onYouTubeIframeAPIReady() {
+  P = new YT.Player('player', {
+    playerVars: { playsinline: 1, rel: 0 },
+    events: {
+      onReady: () => { ready = true; P.setVolume(vol); apply(false); },
+      onStateChange: onPlayerState,
+      onError: onPlayerError,
+    },
+  });
+}
+
+// État "officiel" reçu du serveur après une action : on aligne le lecteur dessus
+function apply(isTick) {
+  if (!ready || !S) return;
+  const it = S.queue[S.index];
+  if (isTick) return tickSync(it);
+
+  renderQueue();
+  $('toggle').textContent = S.playing ? '⏸' : '▶';
+
+  if (!it) {
+    silence(1000); P.stopVideo(); loaded = null; hidePlaylist(); updateNow();
+    return;
+  }
+  if (it.kind !== 'playlist') hidePlaylist();
+  else if (plIds.length) renderPlaylist();
+  updateNow();
+
+  const key = keyOf(it);
+  if (loaded !== key) {
+    // Nouveau morceau : on le charge
+    loaded = key;
+    plIds = [];
+    silence(S.playing ? 4000 : 3500);
+    if (it.kind === 'playlist') {
+      if (it.order) P.loadPlaylist(it.order, S.pl, expected());
+      else P.loadPlaylist({ list: it.id, index: S.pl, startSeconds: expected() });
+    } else {
+      P.loadVideoById({ videoId: it.id, startSeconds: expected() });
+    }
+    if (!S.playing) setTimeout(() => { if (S && !S.playing) { silence(1500); P.pauseVideo(); } }, 1200);
+    setTimeout(refreshPlaylist, 1500);
+    return;
+  }
+
+  // Même morceau : on corrige l'index, le temps, puis lecture / pause
+  silence(1200);
+  if (it.kind === 'playlist' && P.getPlaylistIndex && P.getPlaylistIndex() !== S.pl) {
+    P.playVideoAt(S.pl);
+  } else if (Math.abs(P.getCurrentTime() - expected()) > 2) {
+    P.seekTo(expected(), true);
+  }
+  const st = P.getPlayerState();
+  if (S.playing) {
+    if (st !== 1 && st !== 3 && st !== 0) P.playVideo();
+  } else if (st === 1 || st === 3) {
+    P.pauseVideo();
+  }
+  setTimeout(refreshPlaylist, 1500);
+}
+
+// Rappel régulier du serveur : il ne corrige QUE les décalages de temps.
+// Il ne relance jamais une lecture mise en pause et ne change jamais de morceau.
+function tickSync(it) {
+  if (!S.playing || !it || loaded !== keyOf(it)) return;
+  if (Date.now() - lastAct < 2500 || Date.now() < quietUntil) return;
+  const st = P.getPlayerState();
+  if (st === 1) {
+    if (Math.abs(P.getCurrentTime() - expected()) > 2.5) { silence(1500); P.seekTo(expected(), true); }
+  } else if (st === -1 || st === 5) {
+    silence(1500); P.playVideo();
+  }
+}
+
+// Ce que fait la personne directement sur le lecteur YouTube
+function onPlayerState(e) {
+  const st = e.data;
+  if (st === YT.PlayerState.PLAYING || st === YT.PlayerState.CUED) refreshPlaylist();
+  if (!S) return;
+  const it = S.queue[S.index];
+  if (!it) return;
+
+  if (st === YT.PlayerState.ENDED) {
+    if (it.kind === 'playlist') {
+      const ids = (P.getPlaylist && P.getPlaylist()) || plIds;
+      const idx = P.getPlaylistIndex ? P.getPlaylistIndex() : -1;
+      if (ids && ids.length && idx >= 0 && idx < ids.length - 1) return; // YouTube enchaîne tout seul
+    }
+    send({ type: 'next', from: S.index }); // jamais ignoré, même juste après une commande
+    return;
+  }
+
+  if (Date.now() < quietUntil) return; // écho de nos propres commandes
+  const t = P.getCurrentTime();
+
+  if (st === YT.PlayerState.PLAYING) {
+    if (it.kind === 'playlist') {
+      const i = P.getPlaylistIndex();
+      if (i >= 0 && i !== S.pl) return send({ type: 'plindex', pl: i });
+    }
+    if (!S.playing) send({ type: 'play', pos: t });
+    else if (Math.abs(t - expected()) > 2) send({ type: 'seek', pos: t });
+  } else if (st === YT.PlayerState.PAUSED && S.playing) {
+    send({ type: 'pause' });
+  }
+}
+
+// Vidéo impossible à lire (bloquée, supprimée…) : on passe à la suivante
+function onPlayerError() {
+  if (!S) return;
+  const it = S.queue[S.index];
+  if (!it) return;
+  if (it.kind === 'playlist' && plIds.length && S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
+  else send({ type: 'next', from: S.index });
+}
+
+// ---------- Barre de lecture et volume ----------
+setInterval(() => {
+  if (!ready || !S || seeking) return;
+  try {
+    const d = P.getDuration ? P.getDuration() : 0;
+    const t = P.getCurrentTime ? P.getCurrentTime() : 0;
+    $('tCur').textContent = fmt(t);
+    $('tDur').textContent = fmt(d);
+    $('seek').value = d > 0 ? Math.round((t / d) * 1000) : 0;
+  } catch {}
+}, 500);
+
+const seekEl = $('seek');
+seekEl.addEventListener('pointerdown', () => { seeking = true; });
+window.addEventListener('pointerup', () => setTimeout(() => { seeking = false; }, 50));
+seekEl.addEventListener('input', () => {
+  if (ready) $('tCur').textContent = fmt((seekEl.value / 1000) * P.getDuration());
+});
+seekEl.addEventListener('change', () => {
+  const d = ready ? P.getDuration() : 0;
+  if (d > 0) send({ type: 'seek', pos: (seekEl.value / 1000) * d });
+  seeking = false;
+});
+
+$('vol').addEventListener('input', (e) => {
+  vol = Number(e.target.value);
+  if (ready) P.setVolume(vol);
+  try { localStorage.setItem('vol', String(vol)); } catch {}
+});
+
+// ---------- Playlist en cours ----------
 function hidePlaylist() { plIds = []; $('plCard').style.display = 'none'; }
 
 function refreshPlaylist() {
@@ -195,104 +434,102 @@ function renderPlaylist() {
     const li = document.createElement('li');
     if (S && i === S.pl) li.className = 'cur';
     const span = document.createElement('span');
+    span.className = 't';
     span.textContent = (i + 1) + '. ' + (titles[id] || 'Piste ' + (i + 1));
     li.appendChild(span);
     li.onclick = () => send({ type: 'plindex', pl: i });
     ul.appendChild(li);
   });
+  updateNow();
 }
 
-const $ = (id) => document.getElementById(id);
-const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
-const expected = () => S.playing ? S.pos + (Date.now() - S.recv) / 1000 : S.pos;
+function updateNow() {
+  const it = S && S.queue[S.index];
+  let t = 'Rien en lecture';
+  if (it) {
+    t = it.title || it.id;
+    if (it.kind === 'playlist') {
+      const id = plIds[S.pl];
+      if (id && titles[id]) t = titles[id];
+    }
+  }
+  $('nowPlaying').textContent = t;
+}
 
-// ---------- Connexion ----------
-try {
-  $('pseudoInput').value = localStorage.getItem('pseudo') || '';
-  $('roomInput').value = localStorage.getItem('room') || '';
-} catch {}
-
-$('joinBtn').onclick = () => {
-  pseudo = $('pseudoInput').value.trim().slice(0, 20) || 'Anonyme';
-  room = $('roomInput').value.trim().toLowerCase() || 'salle';
-  try { localStorage.setItem('pseudo', pseudo); localStorage.setItem('room', room); } catch {}
-  $('roomName').textContent = room;
-  $('meName').textContent = pseudo;
-  $('join').style.display = 'none';
-  connect();
+// ---------- Mélanger ----------
+$('shuffleQueue').onclick = () => send({ type: 'shufflequeue' });
+$('shufflePl').onclick = () => {
+  if (!S || !plIds.length) return;
+  const cur = plIds[S.pl];
+  const rest = plIds.filter((_, i) => i !== S.pl);
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  send({ type: 'plshuffle', order: [cur, ...rest] }); // la vidéo en cours reste en premier
 };
-['pseudoInput', 'roomInput'].forEach((id) =>
-  $(id).addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBtn').click()));
 
-function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host);
-  ws.onopen = () => { send({ type: 'join', room, pseudo }); $('status').textContent = 'Connectée ✔'; };
-  ws.onclose = () => { $('status').textContent = 'Déconnectée, reconnexion…'; setTimeout(connect, 2000); };
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === 'state') { S = m; S.recv = Date.now(); apply(); }
-    else if (m.type === 'chat') addChat(m);
-    else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach((x) => addChat(x, true)); }
-  };
-}
+// ---------- File d'attente (avec glisser-déposer) ----------
+let dragFrom = null;
+function renderQueue() {
+  const ul = $('queue');
+  ul.innerHTML = '';
+  $('queueCount').textContent = S.queue.length;
+  if (!S.queue.length) {
+    ul.innerHTML = '<li style="cursor:default"><span class="t" style="color:var(--mut)">File vide, ajoute un lien !</span></li>';
+    return;
+  }
+  S.queue.forEach((it, i) => {
+    const li = document.createElement('li');
+    li.draggable = true;
+    if (i === S.index) li.className = 'cur';
 
-// ---------- Lecteur YouTube ----------
-function onYouTubeIframeAPIReady() {
-  P = new YT.Player('player', {
-    playerVars: { playsinline: 1, rel: 0 },
-    events: { onReady: () => { ready = true; apply(); }, onStateChange: onPlayerState },
+    const grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.textContent = '⠿';
+    grip.title = 'Glisse pour déplacer';
+
+    const span = document.createElement('span');
+    span.className = 't';
+    span.textContent = (it.kind === 'playlist' ? '📃 ' : '') + (it.title || it.id);
+
+    const x = document.createElement('small');
+    x.textContent = '✕';
+    x.title = 'Retirer';
+    x.onclick = (e) => { e.stopPropagation(); send({ type: 'remove', index: i }); };
+
+    li.append(grip, span, x);
+    li.onclick = () => send({ type: 'jump', index: i });
+
+    li.ondragstart = (e) => {
+      dragFrom = i;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+      li.classList.add('dragging');
+    };
+    li.ondragend = () => {
+      dragFrom = null;
+      document.querySelectorAll('#queue li').forEach((n) => n.classList.remove('dragging', 'over'));
+    };
+    li.ondragover = (e) => { e.preventDefault(); li.classList.add('over'); };
+    li.ondragleave = () => li.classList.remove('over');
+    li.ondrop = (e) => {
+      e.preventDefault();
+      li.classList.remove('over');
+      if (dragFrom !== null && dragFrom !== i) send({ type: 'move', from: dragFrom, to: i });
+      dragFrom = null;
+    };
+    ul.appendChild(li);
   });
 }
 
-function apply() {
-  if (!ready || !S) return;
-  renderQueue();
-  const it = S.queue[S.index];
-  if (!it) { applying = true; P.stopVideo(); loaded = null; hidePlaylist(); setTimeout(() => applying = false, 800); return; }
-  if (it.kind !== 'playlist') hidePlaylist();
-  else if (plIds.length) renderPlaylist();
-
-  applying = true;
-  const key = S.index + ':' + it.id;
-  if (loaded !== key) {
-    loaded = key;
-    plIds = [];
-    if (it.kind === 'playlist') P.loadPlaylist({ list: it.id, index: S.pl, startSeconds: expected() });
-    else P.loadVideoById({ videoId: it.id, startSeconds: expected() });
-    if (!S.playing) setTimeout(() => P.pauseVideo(), 1000);
-  } else {
-    if (it.kind === 'playlist' && P.getPlaylistIndex && P.getPlaylistIndex() !== S.pl) {
-      P.playVideoAt(S.pl);
-    } else if (Math.abs(P.getCurrentTime() - expected()) > 2) {
-      P.seekTo(expected(), true);
-    }
-    const st = P.getPlayerState();
-    if (S.playing && st !== 1 && st !== 3) P.playVideo();
-    if (!S.playing && st === 1) P.pauseVideo();
-  }
-  setTimeout(() => { applying = false; refreshPlaylist(); }, 1500);
-}
-
-function onPlayerState(e) {
-  if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.CUED) refreshPlaylist();
-  if (applying || !S) return;
-  const it = S.queue[S.index];
-  if (!it) return;
-  const t = P.getCurrentTime();
-
-  if (e.data === YT.PlayerState.PLAYING) {
-    if (it.kind === 'playlist' && P.getPlaylistIndex() !== S.pl) return send({ type: 'plindex', pl: P.getPlaylistIndex() });
-    if (!S.playing) send({ type: 'play', pos: t });
-    else if (Math.abs(t - expected()) > 2) send({ type: 'seek', pos: t });
-  } else if (e.data === YT.PlayerState.PAUSED && S.playing) {
-    send({ type: 'pause' });
-  } else if (e.data === YT.PlayerState.ENDED) {
-    send({ type: 'next', from: S.index });
-  }
-}
-
 // ---------- Chat ----------
+function colorOf(name) {
+  let h = 0;
+  for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return 'hsl(' + h + ' 75% 72%)';
+}
+
 function addChat(m, silent) {
   const log = $('chatLog');
   const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
@@ -302,11 +539,20 @@ function addChat(m, silent) {
     d.textContent = m.text;
   } else {
     d.className = 'msg' + (m.pseudo === pseudo ? ' mine' : '');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
     const b = document.createElement('b');
     b.textContent = m.pseudo;
+    b.style.color = colorOf(m.pseudo);
+    meta.appendChild(b);
+    if (m.ts) {
+      const tm = document.createElement('time');
+      tm.textContent = new Date(m.ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      meta.appendChild(tm);
+    }
     const t = document.createElement('div');
     t.textContent = m.text;
-    d.append(b, t);
+    d.append(meta, t);
   }
   log.appendChild(d);
   while (log.children.length > 100) log.removeChild(log.firstChild);
@@ -333,6 +579,7 @@ function toggleChat(open) {
 }
 $('chatFab').onclick = () => toggleChat();
 $('chatClose').onclick = () => toggleChat(false);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleChat(false); });
 
 function sendChat() {
   const text = $('chatInput').value.trim();
@@ -343,11 +590,11 @@ function sendChat() {
 $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => e.key === 'Enter' && sendChat());
 
-// ---------- Contrôles ----------
+// ---------- Boutons de lecture ----------
 $('toggle').onclick = () => S && send(S.playing ? { type: 'pause' } : { type: 'play' });
 $('next').onclick = () => {
   const it = S && S.queue[S.index];
-  if (it && it.kind === 'playlist' && S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
+  if (it && it.kind === 'playlist' && plIds.length && S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
   else send({ type: 'next' });
 };
 $('prev').onclick = () => {
@@ -356,11 +603,13 @@ $('prev').onclick = () => {
   else send({ type: 'prev' });
 };
 
+// ---------- Ajout d'un lien ----------
 function parseLink(url) {
   try {
     const u = new URL(url);
     const list = u.searchParams.get('list');
-    if (list) return { kind: 'playlist', id: list };
+    // Les "mix" automatiques (RD…) ne se lisent pas : on garde seulement la vidéo
+    if (list && !list.startsWith('RD')) return { kind: 'playlist', id: list };
     if (u.hostname.includes('youtu.be')) return { kind: 'video', id: u.pathname.slice(1) };
     const v = u.searchParams.get('v');
     if (v) return { kind: 'video', id: v };
@@ -371,35 +620,18 @@ function parseLink(url) {
 }
 
 $('add').onclick = async () => {
-  const p = parseLink($('link').value.trim());
+  const raw = $('link').value.trim();
+  const p = parseLink(raw);
   if (!p) { alert('Lien YouTube non reconnu 🤔'); return; }
+  $('link').value = '';
   let title = '';
   try {
-    const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent($('link').value.trim()));
+    const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(raw));
     title = (await r.json()).title || '';
   } catch {}
   send({ type: 'add', ...p, title: title || (p.kind === 'playlist' ? 'Playlist' : 'Vidéo ' + p.id) });
-  $('link').value = '';
 };
 $('link').addEventListener('keydown', (e) => e.key === 'Enter' && $('add').click());
-
-function renderQueue() {
-  const ul = $('queue');
-  ul.innerHTML = '';
-  S.queue.forEach((it, i) => {
-    const li = document.createElement('li');
-    if (i === S.index) li.className = 'cur';
-    const span = document.createElement('span');
-    span.textContent = (it.kind === 'playlist' ? '📃 ' : '▶ ') + it.title;
-    const x = document.createElement('small');
-    x.textContent = '✕';
-    x.onclick = (e) => { e.stopPropagation(); send({ type: 'remove', index: i }); };
-    li.append(span, x);
-    li.onclick = () => send({ type: 'jump', index: i });
-    ul.appendChild(li);
-  });
-  if (!S.queue.length) ul.innerHTML = '<li style="cursor:default"><span style="color:var(--mut)">File vide, ajoute un lien !</span></li>';
-}
 </script>
 </body>
 </html>
