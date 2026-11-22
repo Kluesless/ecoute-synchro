@@ -433,15 +433,40 @@ function onPlayerError(e) {
     150: 'lecture interdite hors de YouTube par le propriétaire',
   }[code] || ('code ' + code);
   const it = S && S.queue[S.index];
-  banner('⚠️ YouTube ne peut pas lire « ' + (it ? (it.title || it.id) : '?') + ' » : ' + why);
+  let name = it ? (it.title || it.id) : '?';
+  if (it && it.kind === 'playlist') {
+    const ids = (P.getPlaylist && P.getPlaylist()) || plIds;
+    const id = ids && ids[P.getPlaylistIndex ? P.getPlaylistIndex() : S.pl];
+    name = id && titles[id] ? titles[id] : 'une vidéo de « ' + name + ' »';
+  }
+  banner('⚠️ Indisponible, on passe à la suite : ' + name + ' (' + why + ')');
+  skipUnavailable(0);
+}
+
+// Passe automatiquement à la suite quand une musique est indisponible
+function skipUnavailable(attempt) {
+  if (!S) return;
+  const it = S.queue[S.index];
   if (!it) return;
-  if (it.kind === 'playlist') {
-    if (!plIds.length) return; // la playlist entière ne charge pas : on la laisse affichée pour voir le message
-    if (S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
-    else send({ type: 'next', from: S.index });
+  if (it.kind !== 'playlist') { send({ type: 'next', from: S.index }); return; }
+
+  // On interroge directement le lecteur : la liste peut ne pas être encore connue de la page
+  const ids = (P.getPlaylist && P.getPlaylist()) || [];
+  const cur = P.getPlaylistIndex ? P.getPlaylistIndex() : -1;
+  const i = cur >= 0 ? cur : S.pl;
+
+  if (!ids.length) {
+    // Liste pas encore chargée : on réessaie un peu plus tard, puis on abandonne la playlist
+    if (attempt >= 3) { send({ type: 'next', from: S.index }); return; }
+    const key = keyOf(it), pl0 = S.pl;
+    setTimeout(() => {
+      const now = S && S.queue[S.index];
+      if (now && keyOf(now) === key && S.pl === pl0 && P.getPlayerState() !== 1) skipUnavailable(attempt + 1);
+    }, 1000);
     return;
   }
-  send({ type: 'next', from: S.index });
+  if (i >= ids.length - 1) send({ type: 'next', from: S.index }); // c'était la dernière piste
+  else send({ type: 'plindex', pl: i + 1 });
 }
 
 // ---------- Barre de lecture et volume ----------
