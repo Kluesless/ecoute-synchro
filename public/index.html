@@ -33,6 +33,7 @@
   #player-wrap { position:relative; aspect-ratio:16/9; width:100%; border-radius:12px; overflow:hidden; background:#000;
                  box-shadow:0 10px 30px rgba(0,0,0,.45); }
   #player-wrap iframe, #player-wrap #player { position:absolute; inset:0; width:100%; height:100%; }
+  #banner { display:none; margin-top:10px; padding:8px 10px; border-radius:10px; background:#4a2b14; color:#ffd9a8; font-size:.82rem; }
   #nowPlaying { margin-top:10px; font-weight:600; font-size:.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .seekrow { display:flex; align-items:center; gap:8px; margin-top:6px; color:var(--mut); font-size:.78rem; }
   .seekrow input[type=range], .vol input[type=range] { padding:0; height:18px; background:none; accent-color:var(--acc); cursor:pointer; flex:1; }
@@ -93,9 +94,9 @@
                display:none; flex-direction:column; overflow:hidden; z-index:20; }
   #chatPanel.open { display:flex; animation:pop .15s ease; }
   @keyframes pop { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-  #chatHead { display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+  #chatHead, #libHead { display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
               background:linear-gradient(90deg, var(--card2), #31285a); font-weight:600; font-size:.95rem; }
-  #chatClose { background:none; padding:2px 6px; color:var(--mut); font-size:1rem; }
+  #chatClose, #libClose { background:none; padding:2px 6px; color:var(--mut); font-size:1rem; }
   #chatLog { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px; scrollbar-width:thin; }
   .msg { background:var(--card2); padding:6px 10px; border-radius:14px 14px 14px 4px; max-width:86%; word-break:break-word;
          align-self:flex-start; font-size:.9rem; animation:pop .12s ease; }
@@ -104,6 +105,23 @@
   .msg time { color:var(--mut); font-size:.68rem; }
   .msg.mine { align-self:flex-end; background:#3a2f6b; border-radius:14px 14px 4px 14px; }
   .msg.sys { align-self:center; background:none; color:var(--mut); font-size:.75rem; padding:0; }
+  .hl { display:flex; align-items:center; gap:12px; }
+  .hl button { padding:6px 12px; font-size:.85rem; margin-bottom:6px; }
+
+  /* Bibliothèque de playlists */
+  #libPanel { position:fixed; left:16px; top:58px; width:340px; height:min(470px, calc(100vh - 150px));
+              background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.55);
+              display:none; flex-direction:column; overflow:hidden; z-index:20; }
+  #libPanel.open { display:flex; animation:pop .15s ease; }
+  #libList { flex:1; min-height:0; max-height:none; padding:8px; }
+  #libList li { cursor:default; flex-wrap:wrap; gap:6px; padding:8px; margin-bottom:4px; background:#221d3b; }
+  #libList .info { flex:1; min-width:0; display:flex; flex-direction:column; }
+  #libList .info small { padding:0; color:var(--mut); font-size:.72rem; }
+  #libList li:hover { background:#2a2447; }
+  #libForm { display:flex; flex-direction:column; gap:6px; padding:8px; border-top:1px solid var(--line); }
+  #libForm input { padding:8px 10px; font-size:.88rem; }
+  #libForm button { padding:8px 12px; }
+  #libMsg { color:var(--mut); font-size:.75rem; min-height:1em; }
   #chatForm { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
   #chatForm input { padding:8px 10px; font-size:.9rem; border-radius:18px; }
   #chatForm button { padding:8px 14px; border-radius:18px; }
@@ -126,7 +144,10 @@
 
 <main>
   <header>
-    <h1>🎧 Salle : <span id="roomName"></span></h1>
+    <div class="hl">
+      <button class="ghost" id="libBtn" title="Playlists enregistrées">📚 Playlists</button>
+      <h1>🎧 Salle : <span id="roomName"></span></h1>
+    </div>
     <div id="me">👤 <span id="meName"></span></div>
   </header>
 
@@ -134,6 +155,7 @@
     <section id="left">
       <div class="card">
         <div id="player-wrap"><div id="player"></div></div>
+        <div id="banner"></div>
         <div id="nowPlaying">Rien en lecture</div>
         <div class="seekrow">
           <span id="tCur">0:00</span>
@@ -190,10 +212,24 @@
   </div>
 </div>
 
+<div id="libPanel">
+  <div id="libHead"><span>📚 Playlists partagées<span class="count" id="libCount">0</span></span><button id="libClose" title="Fermer">✕</button></div>
+  <ul id="libList"></ul>
+  <div id="libForm">
+    <input id="libLink" placeholder="Colle un lien de playlist YouTube">
+    <div class="row">
+      <input id="libName" placeholder="Nom (facultatif)" maxlength="100">
+      <button id="libSave">Enregistrer</button>
+    </div>
+    <div id="libMsg"></div>
+  </div>
+</div>
+
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 let ws, P, S = null, loaded = null, ready = false, room = '', pseudo = '';
 let plIds = [];
+let LIB = [];
 let unread = 0;
 let quietUntil = 0;   // on ignore les évènements du lecteur juste après NOS propres commandes
 let lastAct = 0;      // dernière action de l'utilisateur (évite qu'un rappel de synchro l'écrase)
@@ -240,12 +276,17 @@ $('joinBtn').onclick = () => {
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + location.host);
-  ws.onopen = () => { send({ type: 'join', room, pseudo }); $('status').textContent = 'Connectée ✔'; };
+  ws.onopen = () => {
+    send({ type: 'join', room, pseudo });
+    send({ type: 'libsync', items: myLibLoad() });
+    $('status').textContent = 'Connectée ✔';
+  };
   ws.onclose = () => { $('status').textContent = 'Déconnectée, reconnexion…'; setTimeout(connect, 2000); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'state') { S = m; S.recv = Date.now(); apply(!!m.tick); }
     else if (m.type === 'chat') addChat(m);
+    else if (m.type === 'lib') { LIB = m.items; renderLib(); }
     else if (m.type === 'chat_history') { $('chatLog').innerHTML = ''; m.messages.forEach((x) => addChat(x, true)); }
   };
 }
@@ -351,6 +392,7 @@ function onPlayerState(e) {
       const i = P.getPlaylistIndex();
       if (i >= 0 && i !== S.pl) return send({ type: 'plindex', pl: i });
     }
+    banner('');
     if (!S.playing) send({ type: 'play', pos: t });
     else if (Math.abs(t - expected()) > 2) send({ type: 'seek', pos: t });
   } else if (st === YT.PlayerState.PAUSED && S.playing) {
@@ -358,13 +400,36 @@ function onPlayerState(e) {
   }
 }
 
-// Vidéo impossible à lire (bloquée, supprimée…) : on passe à la suivante
-function onPlayerError() {
-  if (!S) return;
-  const it = S.queue[S.index];
+// Message d'avertissement visible sous la vidéo
+let bannerTimer = null;
+function banner(text) {
+  const b = $('banner');
+  b.textContent = text;
+  b.style.display = text ? 'block' : 'none';
+  clearTimeout(bannerTimer);
+  if (text) bannerTimer = setTimeout(() => banner(''), 12000);
+}
+
+// YouTube refuse de lire quelque chose : on l'affiche clairement, puis on passe à la suite
+function onPlayerError(e) {
+  const code = e && e.data;
+  const why = {
+    2: 'lien invalide',
+    5: 'erreur du lecteur',
+    100: 'introuvable, supprimée ou privée',
+    101: 'lecture interdite hors de YouTube par le propriétaire',
+    150: 'lecture interdite hors de YouTube par le propriétaire',
+  }[code] || ('code ' + code);
+  const it = S && S.queue[S.index];
+  banner('⚠️ YouTube ne peut pas lire « ' + (it ? (it.title || it.id) : '?') + ' » : ' + why);
   if (!it) return;
-  if (it.kind === 'playlist' && plIds.length && S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
-  else send({ type: 'next', from: S.index });
+  if (it.kind === 'playlist') {
+    if (!plIds.length) return; // la playlist entière ne charge pas : on la laisse affichée pour voir le message
+    if (S.pl < plIds.length - 1) send({ type: 'plindex', pl: S.pl + 1 });
+    else send({ type: 'next', from: S.index });
+    return;
+  }
+  send({ type: 'next', from: S.index });
 }
 
 // ---------- Barre de lecture et volume ----------
@@ -571,6 +636,7 @@ function toggleChat(open) {
   const willOpen = typeof open === 'boolean' ? open : !panel.classList.contains('open');
   panel.classList.toggle('open', willOpen);
   if (willOpen) {
+    $('libPanel').classList.remove('open');
     unread = 0;
     $('chatBadge').style.display = 'none';
     $('chatLog').scrollTop = $('chatLog').scrollHeight;
@@ -579,7 +645,7 @@ function toggleChat(open) {
 }
 $('chatFab').onclick = () => toggleChat();
 $('chatClose').onclick = () => toggleChat(false);
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleChat(false); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { toggleChat(false); toggleLib(false); } });
 
 function sendChat() {
   const text = $('chatInput').value.trim();
@@ -589,6 +655,101 @@ function sendChat() {
 }
 $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => e.key === 'Enter' && sendChat());
+
+// ---------- Bibliothèque de playlists ----------
+const myLibLoad = () => {
+  try { const a = JSON.parse(localStorage.getItem('myLib') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+};
+const myLibSave = (a) => { try { localStorage.setItem('myLib', JSON.stringify(a.slice(0, 100))); } catch {} };
+
+let libMsgTimer = null;
+function libMsg(text) {
+  $('libMsg').textContent = text;
+  clearTimeout(libMsgTimer);
+  libMsgTimer = setTimeout(() => { $('libMsg').textContent = ''; }, 3000);
+}
+
+function renderLib() {
+  const ul = $('libList');
+  ul.innerHTML = '';
+  $('libCount').textContent = LIB.length;
+  if (!LIB.length) {
+    ul.innerHTML = '<li><span class="t" style="color:var(--mut)">Aucune playlist enregistrée pour l\'instant</span></li>';
+    return;
+  }
+  LIB.forEach((e) => {
+    const li = document.createElement('li');
+
+    const info = document.createElement('div');
+    info.className = 'info';
+    const title = document.createElement('span');
+    title.className = 't';
+    title.textContent = (e.kind === 'playlist' ? '📃 ' : '▶ ') + e.title;
+    title.title = e.title;
+    const by = document.createElement('small');
+    by.textContent = 'par ' + e.author;
+    info.append(title, by);
+
+    const add = document.createElement('button');
+    add.className = 'mini';
+    add.textContent = '➕';
+    add.title = 'Ajouter à la file d\'attente';
+    add.onclick = () => { send({ type: 'libplay', id: e.id, now: false }); libMsg('Ajoutée à la file ✔'); };
+
+    const play = document.createElement('button');
+    play.className = 'mini';
+    play.textContent = '▶ Lancer';
+    play.title = 'Lancer maintenant';
+    play.onclick = () => { send({ type: 'libplay', id: e.id, now: true }); libMsg('Lancée ✔'); };
+
+    li.append(info, add, play);
+
+    if (e.author === pseudo) {
+      const del = document.createElement('small');
+      del.textContent = '✕';
+      del.title = 'Supprimer mon lien';
+      del.style.cursor = 'pointer';
+      del.onclick = () => {
+        send({ type: 'libdel', id: e.id });
+        myLibSave(myLibLoad().filter((x) => !(x.kind === e.kind && x.id === e.ytId)));
+      };
+      li.appendChild(del);
+    }
+    ul.appendChild(li);
+  });
+}
+
+function toggleLib(open) {
+  const panel = $('libPanel');
+  const willOpen = typeof open === 'boolean' ? open : !panel.classList.contains('open');
+  panel.classList.toggle('open', willOpen);
+  if (willOpen) { $('chatPanel').classList.remove('open'); renderLib(); }
+}
+$('libBtn').onclick = () => toggleLib();
+$('libClose').onclick = () => toggleLib(false);
+
+$('libSave').onclick = async () => {
+  const p = parseLink($('libLink').value.trim());
+  if (!p) { libMsg('Lien YouTube non reconnu 🤔'); return; }
+  if (LIB.some((x) => x.kind === p.kind && x.ytId === p.id)) { libMsg('Déjà dans la liste ✔'); return; }
+  const raw = $('libLink').value.trim();
+  let title = $('libName').value.trim();
+  $('libLink').value = '';
+  $('libName').value = '';
+  if (!title) {
+    try {
+      const r = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(raw));
+      title = (await r.json()).title || '';
+    } catch {}
+  }
+  title = title || (p.kind === 'playlist' ? 'Playlist' : 'Vidéo ' + p.id);
+  send({ type: 'libadd', kind: p.kind, id: p.id, title });
+  const mine = myLibLoad();
+  if (!mine.some((x) => x.kind === p.kind && x.id === p.id)) { mine.push({ kind: p.kind, id: p.id, title }); myLibSave(mine); }
+  libMsg('Enregistrée ✔');
+};
+$('libLink').addEventListener('keydown', (e) => e.key === 'Enter' && $('libSave').click());
+$('libName').addEventListener('keydown', (e) => e.key === 'Enter' && $('libSave').click());
 
 // ---------- Boutons de lecture ----------
 $('toggle').onclick = () => S && send(S.playing ? { type: 'pause' } : { type: 'play' });

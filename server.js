@@ -21,7 +21,7 @@ function getRoom(id) {
   return rooms[id] || (rooms[id] = {
     queue: [], index: 0, playing: false, ended: false,
     base: 0, ts: Date.now(), pl: 0, uid: 0,
-    clients: new Set(), chat: [],
+    clients: new Set(), chat: [], lib: [], libUid: 0,
   });
 }
 
@@ -43,6 +43,23 @@ function pushChat(r, msg) {
   if (r.chat.length > 50) r.chat.shift();
   const data = JSON.stringify({ type: 'chat', ...msg });
   r.clients.forEach((c) => c.readyState === 1 && c.send(data));
+}
+
+function broadcastLib(r) {
+  const data = JSON.stringify({ type: 'lib', items: r.lib });
+  r.clients.forEach((c) => c.readyState === 1 && c.send(data));
+}
+
+const validLib = (m) =>
+  (m.kind === 'video' || m.kind === 'playlist') && typeof m.id === 'string' && /^[\w-]{1,80}$/.test(m.id);
+
+const hasLib = (r, kind, ytId) => r.lib.some((x) => x.kind === kind && x.ytId === ytId);
+
+function addLib(r, kind, ytId, title, author) {
+  r.lib.push({
+    id: ++r.libUid, kind, ytId, author, ts: Date.now(),
+    title: String(title || '').trim().slice(0, 100) || (kind === 'playlist' ? 'Playlist' : 'Vidéo'),
+  });
 }
 
 function startItem(r, index) {
@@ -73,6 +90,7 @@ wss.on('connection', (ws) => {
       r.clients.add(ws);
       ws.send(JSON.stringify(snapshot(r)));
       ws.send(JSON.stringify({ type: 'chat_history', messages: r.chat }));
+      ws.send(JSON.stringify({ type: 'lib', items: r.lib }));
       pushChat(r, { system: true, text: ws.pseudo + ' a rejoint la salle' });
       return;
     }
@@ -81,6 +99,34 @@ wss.on('connection', (ws) => {
     if (m.type === 'chat') {
       const text = String(m.text || '').trim().slice(0, 300);
       if (text) pushChat(r, { pseudo: ws.pseudo, text, ts: Date.now() });
+      return;
+    }
+
+    // --- Bibliothèque de playlists partagée par toute la salle ---
+    if (m.type === 'libadd') {
+      if (!validLib(m) || r.lib.length >= 200 || hasLib(r, m.kind, m.id)) return;
+      addLib(r, m.kind, m.id, m.title, ws.pseudo);
+      broadcastLib(r);
+      return;
+    }
+    if (m.type === 'libdel') {
+      // On ne peut supprimer que ses propres liens
+      const i = r.lib.findIndex((x) => x.id === m.id && x.author === ws.pseudo);
+      if (i < 0) return;
+      r.lib.splice(i, 1);
+      broadcastLib(r);
+      return;
+    }
+    if (m.type === 'libsync') {
+      // Chacun renvoie ses propres liens à la connexion : ils survivent à un redémarrage du serveur
+      if (!Array.isArray(m.items)) return;
+      let changed = false;
+      for (const it of m.items.slice(0, 100)) {
+        if (!it || !validLib(it) || r.lib.length >= 200 || hasLib(r, it.kind, it.id)) continue;
+        addLib(r, it.kind, it.id, it.title, ws.pseudo);
+        changed = true;
+      }
+      if (changed) broadcastLib(r);
       return;
     }
 
@@ -163,6 +209,14 @@ wss.on('connection', (ws) => {
         if (!isInt(m.pl) || m.pl < 0 || m.pl === r.pl) return;
         r.pl = m.pl; r.base = 0; r.ts = Date.now(); r.playing = true; r.ended = false;
         break;
+      case 'libplay': {
+        const e = r.lib.find((x) => x.id === m.id);
+        if (!e || r.queue.length >= 300) return;
+        r.queue.push({ uid: ++r.uid, kind: e.kind, id: e.ytId, title: e.title });
+        // m.now : lancer tout de suite ; sinon on ajoute à la suite (et ça démarre si rien ne jouait)
+        if (r.queue.length === 1 || r.ended || m.now === true) startItem(r, r.queue.length - 1);
+        break;
+      }
       default:
         return;
     }
