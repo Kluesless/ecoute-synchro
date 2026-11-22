@@ -14,12 +14,19 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 const rooms = {};
 
+// Playlists officielles de YouTube (tops du moment), utilisées par le mode automatique
+const AUTO_LISTS = [
+  { id: 'PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i', name: 'Top 100 des titres (monde)' },
+  { id: 'PL4fGSI1pDJn5kI81J1fYWK5eZRl1zJ5kM', name: 'Top 100 des clips (monde)' },
+  { id: 'PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI', name: 'Clips populaires' },
+];
+
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isInt = (v) => Number.isInteger(v);
 
 function getRoom(id) {
   return rooms[id] || (rooms[id] = {
-    queue: [], index: 0, playing: false, ended: false,
+    queue: [], index: 0, playing: false, ended: false, auto: false,
     base: 0, ts: Date.now(), pl: 0, uid: 0,
     clients: new Set(), chat: [], lib: [], libUid: 0,
   });
@@ -30,7 +37,7 @@ const position = (r) => (r.playing ? r.base + (Date.now() - r.ts) / 1000 : r.bas
 
 const snapshot = (r, tick = false) => ({
   type: 'state', tick, queue: r.queue, index: r.index,
-  playing: r.playing, pos: position(r), pl: r.pl,
+  playing: r.playing, pos: position(r), pl: r.pl, auto: r.auto,
 });
 
 function broadcast(r, tick = false) {
@@ -65,6 +72,33 @@ function addLib(r, kind, ytId, title, author) {
 function startItem(r, index) {
   r.index = index; r.pl = 0; r.base = 0; r.ts = Date.now();
   r.playing = true; r.ended = false;
+}
+
+// Mode automatique : quand il n'y a plus rien, on lance un top du moment (à un endroit au hasard)
+function autoFill(r) {
+  if (!r.auto) return false;
+  if (r.queue.length >= 250) { // on garde seulement les derniers morceaux joués
+    r.queue.splice(0, r.queue.length - 10);
+    r.index = r.queue.length - 1;
+  }
+  const src = AUTO_LISTS[Math.floor(Math.random() * AUTO_LISTS.length)];
+  r.queue.push({ uid: ++r.uid, kind: 'playlist', id: src.id, title: '🎲 ' + src.name, auto: true });
+  startItem(r, r.queue.length - 1);
+  r.pl = Math.floor(Math.random() * 20);
+  return true;
+}
+
+// Ajoute un morceau choisi par quelqu'un. Il prend la place d'un morceau "automatique" en cours.
+function enqueue(r, item, now) {
+  const cur = r.queue[r.index];
+  if (cur && cur.auto && r.index === r.queue.length - 1) {
+    r.queue.splice(r.index, 1);
+    r.queue.push(item);
+    startItem(r, r.queue.length - 1);
+    return;
+  }
+  r.queue.push(item);
+  if (r.queue.length === 1 || r.ended || now) startItem(r, r.queue.length - 1);
 }
 
 function shuffleInPlace(a) {
@@ -135,9 +169,7 @@ wss.on('connection', (ws) => {
         if (m.kind !== 'video' && m.kind !== 'playlist') return;
         if (typeof m.id !== 'string' || !/^[\w-]{1,80}$/.test(m.id)) return;
         if (r.queue.length >= 300) return;
-        r.queue.push({ uid: ++r.uid, kind: m.kind, id: m.id, title: String(m.title || '').slice(0, 100) });
-        // Première musique, ou la file était terminée : on lance la nouvelle
-        if (r.queue.length === 1 || r.ended) startItem(r, r.queue.length - 1);
+        enqueue(r, { uid: ++r.uid, kind: m.kind, id: m.id, title: String(m.title || '').slice(0, 100) }, false);
         break;
       }
       case 'play':
@@ -163,7 +195,7 @@ wss.on('connection', (ws) => {
         if (m.from !== undefined && m.from !== r.index) return;
         if (!r.queue.length) return;
         if (r.index + 1 < r.queue.length) startItem(r, r.index + 1);
-        else { r.playing = false; r.base = 0; r.ended = true; }
+        else if (!autoFill(r)) { r.playing = false; r.base = 0; r.ended = true; }
         break;
       case 'prev':
         if (!r.queue.length) return;
@@ -172,9 +204,14 @@ wss.on('connection', (ws) => {
       case 'remove': {
         if (!isInt(m.index) || !r.queue[m.index]) return;
         r.queue.splice(m.index, 1);
-        if (!r.queue.length) { r.playing = false; r.index = 0; r.base = 0; r.ended = false; }
-        else if (m.index < r.index) r.index--;
-        else if (m.index === r.index) startItem(r, Math.min(r.index, r.queue.length - 1));
+        if (!r.queue.length) {
+          r.playing = false; r.index = 0; r.base = 0; r.ended = false;
+          autoFill(r);
+        } else if (m.index < r.index) r.index--;
+        else if (m.index === r.index) {
+          if (r.index < r.queue.length) startItem(r, r.index);              // le suivant prend la place
+          else if (!autoFill(r)) startItem(r, r.queue.length - 1);          // sinon on revient au précédent
+        }
         break;
       }
       case 'move': {
@@ -209,12 +246,16 @@ wss.on('connection', (ws) => {
         if (!isInt(m.pl) || m.pl < 0 || m.pl === r.pl) return;
         r.pl = m.pl; r.base = 0; r.ts = Date.now(); r.playing = true; r.ended = false;
         break;
+      case 'auto':
+        r.auto = m.on === true;
+        // Si plus rien ne joue, on lance tout de suite de la musique
+        if (r.auto && (!r.queue.length || r.ended)) autoFill(r);
+        break;
       case 'libplay': {
         const e = r.lib.find((x) => x.id === m.id);
         if (!e || r.queue.length >= 300) return;
-        r.queue.push({ uid: ++r.uid, kind: e.kind, id: e.ytId, title: e.title });
         // m.now : lancer tout de suite ; sinon on ajoute à la suite (et ça démarre si rien ne jouait)
-        if (r.queue.length === 1 || r.ended || m.now === true) startItem(r, r.queue.length - 1);
+        enqueue(r, { uid: ++r.uid, kind: e.kind, id: e.ytId, title: e.title }, m.now === true);
         break;
       }
       default:

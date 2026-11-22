@@ -27,6 +27,7 @@
   button:hover { filter:brightness(1.12); }
   button:active { transform:scale(.96); }
   button.ghost { background:var(--card2); }
+  .mini.on { background:var(--acc); }
   .mini { padding:4px 10px; font-size:.8rem; background:var(--card2); white-space:nowrap; }
   .row { display:flex; gap:8px; }
 
@@ -186,7 +187,10 @@
       <div class="card" id="queueCard">
         <div class="head">
           <strong>🎶 File d'attente<span class="count" id="queueCount">0</span></strong>
-          <button class="mini" id="shuffleQueue" title="Mélanger les morceaux à venir">🔀 Mélanger</button>
+          <span class="row" style="gap:6px">
+            <button class="mini" id="autoBtn" title="Quand il n'y a plus rien, lance automatiquement des musiques populaires">🎲 Auto : non</button>
+            <button class="mini" id="shuffleQueue" title="Mélanger les morceaux à venir">🔀 Mélanger</button>
+          </span>
         </div>
         <ul id="queue"></ul>
       </div>
@@ -238,7 +242,7 @@ let vol = 100;
 const titles = {};
 
 const $ = (id) => document.getElementById(id);
-const ACT = new Set(['play', 'pause', 'seek', 'jump', 'next', 'prev', 'remove', 'move', 'plindex', 'plshuffle', 'shufflequeue', 'add']);
+const ACT = new Set(['auto', 'play', 'pause', 'seek', 'jump', 'next', 'prev', 'remove', 'move', 'plindex', 'plshuffle', 'shufflequeue', 'add']);
 const send = (o) => {
   if (ACT.has(o.type)) lastAct = Date.now();
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
@@ -310,6 +314,7 @@ function apply(isTick) {
   if (isTick) return tickSync(it);
 
   renderQueue();
+  renderAuto();
   $('toggle').textContent = S.playing ? '⏸' : '▶';
 
   if (!it) {
@@ -519,6 +524,14 @@ function updateNow() {
     }
   }
   $('nowPlaying').textContent = t;
+}
+
+// ---------- Mode automatique ----------
+$('autoBtn').onclick = () => S && send({ type: 'auto', on: !S.auto });
+function renderAuto() {
+  const on = !!(S && S.auto);
+  $('autoBtn').textContent = on ? '🎲 Auto : oui' : '🎲 Auto : non';
+  $('autoBtn').classList.toggle('on', on);
 }
 
 // ---------- Mélanger ----------
