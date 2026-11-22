@@ -17,7 +17,14 @@
 
   .card { background:var(--card); border:1px solid rgba(255,255,255,.04); border-radius:14px; padding:12px; min-width:0; }
   .head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
-  .head strong { font-size:.95rem; }
+  .head { min-width:0; }
+  .head strong { font-size:.95rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .head .row { flex:none; }
+  /* Carte trop étroite : on garde seulement les emojis sur les boutons */
+  #queueCard { container-name:queue; container-type:inline-size; }
+  #plCard { container-name:pl; container-type:inline-size; }
+  @container queue (max-width: 410px) { #queueCard .lbl { display:none; } }
+  @container pl (max-width: 300px) { #plCard .lbl { display:none; } }
   .count { color:var(--mut); font-weight:400; font-size:.85rem; margin-left:4px; }
 
   input, button { font: inherit; border-radius:10px; border:0; padding:10px 12px; }
@@ -28,7 +35,7 @@
   button:active { transform:scale(.96); }
   button.ghost { background:var(--card2); }
   .mini.on { background:var(--acc); }
-  .mini { padding:4px 10px; font-size:.8rem; background:var(--card2); white-space:nowrap; }
+  .mini { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; font-size:.8rem; background:var(--card2); white-space:nowrap; flex:none; }
   .row { display:flex; gap:8px; }
 
   #player-wrap { position:relative; aspect-ratio:16/9; width:100%; border-radius:12px; overflow:hidden; background:#000;
@@ -188,8 +195,8 @@
         <div class="head">
           <strong>🎶 File d'attente<span class="count" id="queueCount">0</span></strong>
           <span class="row" style="gap:6px">
-            <button class="mini" id="autoBtn" title="Quand il n'y a plus rien, lance automatiquement des musiques populaires">🎲 Auto : non</button>
-            <button class="mini" id="shuffleQueue" title="Mélanger les morceaux à venir">🔀 Mélanger</button>
+            <button class="mini" id="autoBtn" title="Quand il n'y a plus rien, lance automatiquement des musiques populaires"><span>🎲</span><span class="lbl" id="autoLbl">Auto : non</span></button>
+            <button class="mini" id="shuffleQueue" title="Mélanger les morceaux à venir"><span>🔀</span><span class="lbl">Mélanger</span></button>
           </span>
         </div>
         <ul id="queue"></ul>
@@ -198,7 +205,7 @@
       <div class="card" id="plCard" style="display:none">
         <div class="head">
           <strong>📃 Playlist en cours</strong>
-          <button class="mini" id="shufflePl" title="Mélanger la playlist">🔀 Mélanger</button>
+          <button class="mini" id="shufflePl" title="Mélanger la playlist"><span>🔀</span><span class="lbl">Mélanger</span></button>
         </div>
         <ul id="plList"></ul>
       </div>
@@ -530,7 +537,7 @@ function updateNow() {
 $('autoBtn').onclick = () => S && send({ type: 'auto', on: !S.auto });
 function renderAuto() {
   const on = !!(S && S.auto);
-  $('autoBtn').textContent = on ? '🎲 Auto : oui' : '🎲 Auto : non';
+  $('autoLbl').textContent = on ? 'Auto : oui' : 'Auto : non';
   $('autoBtn').classList.toggle('on', on);
 }
 
